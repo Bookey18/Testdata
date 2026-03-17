@@ -20,27 +20,33 @@ st.markdown("""
 # ---------------------------------------------------------
 # 1. Load Data & Prepare
 # ---------------------------------------------------------
-@st.cache_data
+@st.cache_data(ttl=3600) # เพิ่ม ttl=3600 (1 ชม.) เพื่อไม่ให้จำ Cache พังๆ ไว้นานเกินไป
 def load_data(ticker):
-    data = yf.download(ticker, start="2024-01-01", end="2025-01-01", progress=False)
-    if isinstance(data.columns, pd.MultiIndex):
-        try: data = data.xs('Close', level=0, axis=1)
-        except: data.columns = data.columns.get_level_values(0)
+    # ใช้ yf.Ticker().history() จะเสถียรกว่าและไม่เจอปัญหา MultiIndex
+    stock = yf.Ticker(ticker)
+    data = stock.history(start="2024-01-01", end="2025-01-01")
     
-    if 'Close' in data.columns: df = data[["Close"]].reset_index()
-    else: df = data.iloc[:, 0].to_frame().reset_index()
-
+    # เช็คว่าดึงข้อมูลมาได้หรือไม่
+    if data.empty:
+        return pd.DataFrame()
+    
+    # ดึงเฉพาะคอลัมน์ Close และดึง Date ออกมาจาก Index
+    df = data[['Close']].reset_index()
+    
+    # เปลี่ยนชื่อคอลัมน์ให้เข้าฟอร์แมตที่ Prophet ต้องการ
     df.columns = ["ds", "y"]
+    
+    # ตัด Timezone ออก (Prophet ไม่รองรับข้อมูลที่มี Timezone)
     df["ds"] = pd.to_datetime(df["ds"]).dt.tz_localize(None)
+    
     return df
 
 ticker = "NVDA"
 df = load_data(ticker)
 
 if df.empty:
-    st.error("ไม่พบข้อมูล")
+    st.error("ไม่พบข้อมูล: อาจเกิดจากปัญหาการเชื่อมต่ออินเทอร์เน็ต หรือ Yahoo Finance บล็อคคำขอ")
     st.stop()
-
 # แบ่งข้อมูล (Train 10 เดือน / Test 2 เดือน)
 train_df = df[(df["ds"] >= "2024-01-01") & (df["ds"] <= "2024-10-31")].copy()
 actual_test_df = df[(df["ds"] >= "2024-11-01") & (df["ds"] <= "2024-12-31")].copy()
