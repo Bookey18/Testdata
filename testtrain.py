@@ -6,7 +6,6 @@ import pandas as pd
 import numpy as np
 from sklearn.metrics import mean_absolute_error, mean_absolute_percentage_error
 from sklearn.linear_model import LinearRegression
-import requests
 
 # ตั้งค่าหน้าจอแบบ Wide
 st.set_page_config(layout="wide", page_title="NVDA: Prophet vs Linear Regression")
@@ -24,14 +23,8 @@ st.markdown("""
 @st.cache_data(ttl=3600) # เพิ่ม ttl=3600 (1 ชม.) เพื่อไม่ให้จำ Cache พังๆ ไว้นานเกินไป
 def load_data(ticker):
     try:
-        # 1. สร้าง Session และใส่ User-Agent เพื่อพรางตัวว่าเป็นเบราว์เซอร์ทั่วไป ช่วยลดโอกาสโดนบล็อค
-        session = requests.Session()
-        session.headers.update(
-            {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
-        )
-        
-        # 2. ส่ง session เข้าไปตอนเรียก yf.Ticker
-        stock = yf.Ticker(ticker, session=session)
+        # ปล่อยให้ yfinance จัดการ Session เองตามคำแนะนำของ Error
+        stock = yf.Ticker(ticker)
         data = stock.history(start="2024-01-01", end="2025-01-01")
         
         # เช็คว่าดึงข้อมูลมาได้หรือไม่
@@ -45,14 +38,13 @@ def load_data(ticker):
         df.columns = ["ds", "y"]
         
         # ตัด Timezone ออก (Prophet ไม่รองรับข้อมูลที่มี Timezone)
-        # ใช้เงื่อนไขเช็คก่อนว่ามี Timezone ไหม จะได้ไม่แจ้งเตือน Error ซ้อน
         if df["ds"].dt.tz is not None:
             df["ds"] = df["ds"].dt.tz_localize(None)
         
         return df
 
     except Exception as e:
-        # ถ้าดึงข้อมูลไม่ได้เพราะติด Rate Limit หรือ Error อื่นๆ ให้คืนค่า DataFrame ว่างกลับไป
+        # ดักจับ Error ไว้ไม่ให้แอปพัง
         st.warning(f"⚠️ เกิดข้อผิดพลาดในการดึงข้อมูลจาก Yahoo Finance: {e}")
         return pd.DataFrame()
 
